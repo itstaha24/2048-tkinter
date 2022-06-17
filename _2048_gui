@@ -1,0 +1,248 @@
+import random
+import tkinter as tk
+
+
+class Board:
+    def __init__(self, root, n):
+        self.root = root
+        self.n = n
+        self.board = []
+        temp = [0] * self.n
+        for _ in range(self.n):
+            self.board.append(temp.copy())
+        self._makeBoxes()
+
+    def _makeBoxes(self):
+        self.all_frames = []
+        self.all_labels = []
+        for i in range(1, self.n + 1):
+            temp, temp_ = [], []
+            for j in range(self.n):
+                frame = tk.Frame(master=self.root, relief=tk.RAISED,
+                                 height=96, width=96,
+                                 borderwidth=3, bg="#f5f5f5")
+                label = tk.Label(master=frame, text="0",
+                                 height=6, bg="#f5f5f5",
+                                 font=("Helvetica", 24))
+                frame.grid(row=i, column=j, padx=4, pady=4)
+                frame.propagate(False)
+                label.pack()
+                temp.append(frame)
+                temp_.append(label)
+            self.all_frames.append(temp)
+            self.all_labels.append(temp_)
+
+    def getBoard(self):
+        return self.board
+
+    def getFrames(self):
+        return self.all_frames
+
+    def getLabels(self):
+        return self.all_labels
+
+
+class ScoreHeader:
+    def __init__(self, root, n):
+        self.score = 0
+        self.root = root
+        self.n = n
+        self._makeFrame()
+        self._makeScores()
+
+    def _makeFrame(self):
+        frame = tk.Frame(master=self.root, relief=tk.RAISED,
+                         bg="#f5f5f5", height=64, width=(104 * self.n - 8),
+                         borderwidth=3)
+        frame.grid(row=0, column=0, columnspan=self.n, padx=4, pady=4)
+        frame.propagate(False)
+        self.label = tk.Label(master=frame, text="Your score: 0",
+                              height=2, bg="#f5f5f5",
+                              font=("Helvetica", 16))
+        self.label.pack()
+
+    def _makeScores(self):
+        self.all_scores = {
+            0: 0, 2: 10, 4: 20, 8: 50, 16: 100, 32: 200,
+            64: 500, 128: 1000, 256: 2000, 512: 5000,
+            1024: 10000
+        }
+
+    def add(self, n):
+        score = self.all_scores[n]
+        self.score += score
+
+    def changeScore(self):
+        self.label["text"] = f"Your score: {self.score}"
+
+    def showFinalScore(self, is_win):
+        if is_win:
+            self.label["text"] = "You WIN!"
+            self.root.update()
+            self.root.after(3000, self.label.config(
+                text=f"Your final score: {self.score}"))
+            self.root.update()
+        else:
+            self.label["text"] = "You LOSE!"
+            self.root.update()
+            self.root.after(3000, self.label.config(
+                text="Your final score: 0"))
+            self.root.update()
+
+
+class BoardSimulator:
+    def __init__(self, root, n):
+        self.n = n
+        self.root = root
+        self.root.geometry(f"+300+300")
+        b = Board(self.root, self.n)
+        self.board = b.getBoard()
+        self.all_frames = b.getFrames()
+        self.all_labels = b.getLabels()
+
+        self._makeColors()
+        for _ in range(2):
+            self._randomize()
+        self.scorer = ScoreHeader(self.root, self.n)
+
+        self.all_p = []
+        self.dir_ = None
+        self.root.bind("<ButtonPress-1>", self._getPoint)
+        self.root.bind("<ButtonRelease-1>", self._getPoint, add="+")
+        self.root.bind("<ButtonRelease-1>", self._getDir, add="+")
+        self.root.bind("<ButtonRelease-1>", self.play, add="+")
+
+    def _makeColors(self):
+        self.colors = {
+            0: "#f5f5f5", 2: "#fffacd", 4: "#eee8aa",
+            8: "#bdb76b", 16: "#9acd32", 32: "#66cdaa",
+            64: "#00cedf", 128: "#00bfff", 256: "#7b68ee",
+            512: "#9370db", 1024: "#ba55d3", 2048: "#dc143c"
+        }
+
+    def _randomize(self):
+        all_p = []
+        for i in range(self.n):
+            for j in range(self.n):
+                if self.board[i][j] == 0:
+                    all_p.append((i, j))
+        if all_p:
+            i, j = random.choice(all_p)
+            self.board[i][j] = 2
+            self._changeBoxes(i, j)
+
+    def _changeBoxes(self, i, j):
+        n = self.board[i][j]
+        if self.all_labels[i][j]["text"] != n:
+            self.all_labels[i][j]["text"] = n
+            color = self.colors[n]
+            self.all_labels[i][j]["bg"] = color
+            self.all_frames[i][j]["bg"] = color
+
+    def _move(self, row):
+        row = list(filter(bool, row))
+        if self.dir_ == "right" or self.dir_ == "down":
+            row.reverse()
+        for i in range(len(row) - 1):
+            if row[i] == row[i + 1]:
+                self.scorer.add(row[i])
+                row[i] *= 2
+                row.pop(i + 1)
+                row.append(0)
+        for _ in range(self.n - len(row)):
+            row.append(0)
+        if self.dir_ == "right" or self.dir_ == "down":
+            row.reverse()
+        return row
+
+    def makeMove(self):
+        if self.dir_ == "left" or self.dir_ == "right":
+            for n in range(self.n):
+                row = self.board[n].copy()
+                temp = self._move(row)
+                self.board[n] = temp
+                for j in range(self.n):
+                    self._changeBoxes(n, j)
+        else:
+            temp = list(zip(*self.board))
+            all_columns = list(map(list, temp))
+            for n in range(self.n):
+                col = all_columns[n].copy()
+                temp = self._move(col)
+                all_columns[n] = temp
+            temp = list(zip(*all_columns))
+            self.board = list(map(list, temp))
+            for i in range(self.n):
+                for j in range(self.n):
+                    self._changeBoxes(i, j)
+
+    def _getPoint(self, event):
+        x, y = event.x, event.y
+        point = (x, y)
+        self.all_p.append(point)
+
+    def _getDir(self, event):
+        x1, y1 = self.all_p[0]
+        x2, y2 = self.all_p[1]
+        h = x2 - x1
+        v = y2 - y1
+        if v == h == 0:
+            self.dir_ = None
+        elif abs(h) >= abs(v):
+            if h > 0:
+                self.dir_ = "right"
+            else:
+                self.dir_ = "left"
+        else:
+            if v < 0:
+                self.dir_ = "up"
+            else:
+                self.dir_ = "down"
+        self.all_p.clear()
+
+    def _isGameOver(self):
+        all_n, all_n_ = [], []
+        for i in range(self.n):
+            for j in range(self.n):
+                n = self.board[i][j]
+                all_n.append(n)
+                is_same = False
+                if i > 0:
+                    is_same = (n == self.board[i-1][j])
+                if not is_same and i < self.n-1:
+                    is_same = (n == self.board[i+1][j])
+                if not is_same and j > 0:
+                    is_same = (n == self.board[i][j-1])
+                if not is_same and j < self.n-1:
+                    is_same = (n == self.board[i][j+1])
+                all_n_.append(is_same)
+        if 2048 in all_n:
+            self.root.unbind("<ButtonPress-1>")
+            self.root.unbind("<ButtonRelease-1>")
+            self.scorer.showFinalScore(True)
+            return True
+        elif all(all_n) and not any(all_n_):
+            self.root.unbind("<ButtonPress-1>")
+            self.root.unbind("<ButtonRelease-1>")
+            self.scorer.showFinalScore(False)
+            return True
+        else:
+            return False
+
+    def play(self, event):
+        if self.dir_:
+            self.makeMove()
+            self._randomize()
+            self.scorer.add(2)
+            self.scorer.changeScore()
+            if self._isGameOver():
+                self.root.after(3000)
+                self.root.destroy()
+
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.title("2048")
+    BoardSimulator(root, 4)
+    root.mainloop()
+ 
